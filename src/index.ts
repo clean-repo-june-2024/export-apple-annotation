@@ -69,30 +69,54 @@ function convertAppleTime(appleTime: number): number {
   return new Date(APPLE_EPOCH_START + appleTime * 1000).getTime();
 }
 
-(async function main() {
-  const books = await getBooks();
-  const annotations = await getAnnotations();
-  const booksByAssetId: Record<Book["id"], Book> = {};
-  const output = annotations.map(
-    ({ assetId, modifiedAt, createdAt, ...annotation }) => {
-      if (booksByAssetId[assetId] === undefined) {
-        const book = books.find((b) => b.id === assetId);
-        if (book) {
-          booksByAssetId[assetId] = book;
-        }
+async function getTablesInfo(){
+  console.log("booksFiles", booksFiles);
+  let json = {};
+  await Promise.all(booksFiles.map(async (file) => {
+    const db = await createDB(file);
+    const tables = await db.all(`SELECT name FROM sqlite_master WHERE type='table';`);
+    console.log("Tables in", file, tables);
+    // pragma to get table info
+    for (const table of tables) {
+      
+      const tableInfo = await db.all(`PRAGMA table_info(${table.name});`);
+      console.log("Table Info for", table.name, tableInfo);
+      json[table.name] = {
+        ...json[table],
+        name: table.name,
+        columns: tableInfo
       }
-      const book = booksByAssetId[assetId];
-
-      // console.log("Processing book", book);
-      return {
-        ...annotation,
-        modifiedAt: convertAppleTime(modifiedAt),
-        createdAt: convertAppleTime(createdAt),
-        author: book?.author ?? "Unknown Author",
-        title: book?.title ?? "Unknown Title",
-      };
     }
-  );
-  fs.writeFileSync("output.json", JSON.stringify(output));
-  console.log("Exported", output.length, "items");
+  }))
+
+  fs.writeFileSync("tables.json", JSON.stringify(json));
+}
+
+(async function main() {
+  await getTablesInfo();
+  // const books = await getBooks();
+  // const annotations = await getAnnotations();
+  // const booksByAssetId: Record<Book["id"], Book> = {};
+  // const output = annotations.map(
+  //   ({ assetId, modifiedAt, createdAt, ...annotation }) => {
+  //     if (booksByAssetId[assetId] === undefined) {
+  //       const book = books.find((b) => b.id === assetId);
+  //       if (book) {
+  //         booksByAssetId[assetId] = book;
+  //       }
+  //     }
+  //     const book = booksByAssetId[assetId];
+
+  //     // console.log("Processing book", book);
+  //     return {
+  //       ...annotation,
+  //       modifiedAt: convertAppleTime(modifiedAt),
+  //       createdAt: convertAppleTime(createdAt),
+  //       author: book?.author ?? "Unknown Author",
+  //       title: book?.title ?? "Unknown Title",
+  //     };
+  //   }
+  // );
+  // fs.writeFileSync("output.json", JSON.stringify(output));
+  // console.log("Exported", output.length, "items");
 })();
