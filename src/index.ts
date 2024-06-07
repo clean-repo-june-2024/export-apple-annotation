@@ -19,7 +19,9 @@ const SELECT_ALL_ANNOTATIONS_QUERY = `select
   ZFUTUREPROOFING5 as chapter,
   ZANNOTATIONSTYLE as colorCode,
   ZANNOTATIONMODIFICATIONDATE as modifiedAt,
-  ZANNOTATIONCREATIONDATE as createdAt
+  ZANNOTATIONCREATIONDATE as createdAt,
+  ZANNOTATIONLOCATION as annotationLocation,
+  ZANNOTATIONREPRESENTATIVETEXT as annotationText
 from ZAEANNOTATION
 where ZANNOTATIONDELETED = 0 
   and ZANNOTATIONSELECTEDTEXT is not null 
@@ -30,7 +32,17 @@ order by ZANNOTATIONASSETID, ZPLLOCATIONRANGESTART;
 const SELECT_ALL_BOOKS_QUERY = `select 
   ZASSETID as id, 
   ZTITLE as title, 
-  ZAUTHOR as author 
+  ZAUTHOR as author,
+  ZPATH as path,
+  ZLANGUAGE as language,
+  ZGENRE as genre,
+  ZEPUBID as epubId,
+  ZBOOKDESCRIPTION as description,
+  ZASSETID as assetId,
+  ZASSETGUID as assetGuid,
+  ZBOOKHIGHWATERMARKPROGRESS as highWaterMarkProgress,
+  ZFILESIZE as fileSize,
+  ZREADINGPROGRESS as readingProgress
 from ZBKLIBRARYASSET`;
 
 async function createDB(filename: string) {
@@ -47,7 +59,6 @@ async function getBooksFromDBFile(filename: string): Promise<Book[]> {
 
 async function getBooks() {
   const books = await Promise.all(booksFiles.map(getBooksFromDBFile));
-  console.log("Books", books);
   return books.flat();
 }
 
@@ -70,7 +81,6 @@ function convertAppleTime(appleTime: number): number {
 }
 
 async function getTablesInfo(){
-  console.log("booksFiles", booksFiles);
   let json = {};
   await Promise.all(booksFiles.map(async (file) => {
     const db = await createDB(file);
@@ -89,34 +99,67 @@ async function getTablesInfo(){
     }
   }))
 
-  fs.writeFileSync("tables.json", JSON.stringify(json));
+  // fs.writeFileSync("tables.json", JSON.stringify(json));
+}
+
+async function getAnnotationsTableInfo(){
+  console.log("annotationsFiles", annotationsFiles);
+  let json = {};
+  await Promise.all(annotationsFiles.map(async (file) => {
+    const db = await createDB(file);
+    const tables = await db.all(`SELECT name FROM sqlite_master WHERE type='table';`);
+    console.log("Tables in", file, tables);
+    // pragma to get table info
+    for (const table of tables) {
+      
+      const tableInfo = await db.all(`PRAGMA table_info(${table.name});`);
+      console.log("Table Info for", table.name, tableInfo);
+      json[table.name] = {
+        ...json[table],
+        name: table.name,
+        columns: tableInfo
+      }
+    }
+  }))
+
+  fs.writeFileSync("annotation-table.json", JSON.stringify(json));
 }
 
 (async function main() {
-  await getTablesInfo();
-  // const books = await getBooks();
-  // const annotations = await getAnnotations();
-  // const booksByAssetId: Record<Book["id"], Book> = {};
-  // const output = annotations.map(
-  //   ({ assetId, modifiedAt, createdAt, ...annotation }) => {
-  //     if (booksByAssetId[assetId] === undefined) {
-  //       const book = books.find((b) => b.id === assetId);
-  //       if (book) {
-  //         booksByAssetId[assetId] = book;
-  //       }
-  //     }
-  //     const book = booksByAssetId[assetId];
+  try{
+  const books = await getBooks();
+  const annotations = await getAnnotations();
+  const booksByAssetId: Record<Book["id"], Book> = {};
+  const output = annotations.map(
+    ({ assetId, modifiedAt, createdAt, ...annotation }) => {
+      if (booksByAssetId[assetId] === undefined) {
+        const book = books.find((b) => b.id === assetId);
+        if (book) {
+          booksByAssetId[assetId] = book;
+        }
+      }
+      const book = booksByAssetId[assetId];
 
-  //     // console.log("Processing book", book);
-  //     return {
-  //       ...annotation,
-  //       modifiedAt: convertAppleTime(modifiedAt),
-  //       createdAt: convertAppleTime(createdAt),
-  //       author: book?.author ?? "Unknown Author",
-  //       title: book?.title ?? "Unknown Title",
-  //     };
-  //   }
-  // );
-  // fs.writeFileSync("output.json", JSON.stringify(output));
-  // console.log("Exported", output.length, "items");
+      // console.log("Processing book", book);
+      return {
+        ...annotation,
+        modifiedAt: convertAppleTime(modifiedAt),
+        createdAt: convertAppleTime(createdAt),
+        author: book?.author ?? "Unknown Author",
+        title: book?.title ?? "Unknown Title",
+        genre: book?.genre ?? "Unknown Genre",
+        bookProgress: book?.readingProgress ?? 0,
+        bookPath: book?.path ?? "Unknown Path",
+        annotationLocation: annotation.annotationLocation ?? "Unknown Location",
+        language: book?.language ?? "Unknown Language",
+        description: book?.description ?? "Unknown Description",
+      };
+    }
+  );
+
+  fs.writeFileSync("output.json", JSON.stringify(output));
+  console.log("Exported", output.length, "items");
+  }catch(e){
+    console.error("ERROR",e);
+  }
 })();

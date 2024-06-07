@@ -3,6 +3,12 @@ export interface Book {
   id: string;
   title: string | null;
   author: string | null;
+  genre?: string | null;
+  readingProgress?: number;
+  path?: string;
+  language?: string;
+  epudId?: string;
+  description?: string;
 }
 
 export interface Annotation {
@@ -13,4 +19,5 @@ export interface Annotation {
   colorCode: number;
   modifiedAt: number;
   createdAt: number;
+  annotationLocation?: string;
 }
